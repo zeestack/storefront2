@@ -10,6 +10,11 @@ black = "*"
 mysqlclient = "*"
 colorama = "*"
 tzdata = "*"
+markdown = "*"
+django-filter = "*"
+djangorestframework = "==3.12.4"
+six = "*"
+pytz = "*"
 
 [dev-packages]
 black = "*"

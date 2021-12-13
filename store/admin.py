@@ -44,7 +44,7 @@ class CollectionAdmin(admin.ModelAdmin):
         return (
             super()
             .get_queryset(request)
-            .annotate(product_count=Count("product"))
+            .annotate(product_count=Count("products"))
             .order_by("-product_count")
         )
 
