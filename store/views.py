@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from store.filters import ProductFilter
+from store.pagination import DefaultPagination
 
 from .models import Collection, OrderItem, Product, Reviews
 from .serializers import CollectionSerializer, ProductSerializer, ReviewSerializer
@@ -27,6 +28,11 @@ class ProductViewSet(ModelViewSet):
     filterset_class = ProductFilter
     search_fields = ["title", "description"]
     ordering_fields = ["unit_price", "last_update"]
+    """
+    Pagination can also be set up globally in settings module.
+    Please check the settings.py module in storefront folder.
+    """
+    pagination_class = DefaultPagination
 
     def get_serializer_context(self):
         return {"request": self.request}
