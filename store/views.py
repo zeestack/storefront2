@@ -1,95 +1,72 @@
 from django.db.models.aggregates import Count
 from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
 
-from .models import Collection, Product
-from .serializers import CollectionSerializer, ProductSerializer
+from .models import Collection, OrderItem, Product, Reviews
+from .serializers import CollectionSerializer, ProductSerializer, ReviewSerializer
 
 # Create your views here.
 
+
 """
-class ProductList - Inherited by ListCreateAPIView Generic Views
-HTTP Requests supported: GET, POST
+class ProductViewSet - Inherited from ModelViewSet Generic Views
+HTTP Requests supported: GET, POST, PUT, DELETE
 """
 
 
-class ProductList(ListCreateAPIView):
+class ProductViewSet(ModelViewSet):
+    serializer_class = ProductSerializer
+
     def get_queryset(self):
-        return Product.objects.select_related("collection").all()
-
-    def get_serializer_class(self):
-        return ProductSerializer
+        collection_id = self.request.query_params.get("collection_id")
+        if collection_id != None:
+            return Product.objects.filter(collection_id=collection_id)
+        return Product.objects.all()
 
     def get_serializer_context(self):
         return {"request": self.request}
 
-
-"""
-class ProductDetail - Inherited by RetrieveUpdateDestroyAPIView Generic Views
-HTTP Requests supported: GET, POST, PUT, DELETE
-"""
-
-
-class ProductDetail(RetrieveUpdateDestroyAPIView):
-    queryset = Product.objects.all()
-    serializer_class = ProductSerializer
-    # lookup_field = "id"
-
-    def delete(self, request, id):
-
-        """
-        overriding delete method of the parent class
-        """
-        product = get_object_or_404(Product, pk=id)
-        if product.orderitems.count() > 0:
+    def destroy(self, request, *args, **kwargs):
+        if OrderItem.objects.filter(product_id=kwargs["id"]).count() > 0:
             return Response(
                 {
                     "error": "Product cannot be deleted becasue it is associated with an item on order"
                 },
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-        serializer = ProductSerializer(product)
-        serializer.data.id = product.id
-        product.delete()
-        return Response(serializer.data, status=status.HTTP_204_NO_CONTENT)
+        return super().destroy(request, *args, **kwargs)
 
 
 """
-CollectionList - Inherited by ListCreateAPIView Generic Views
-HTTP Requests supported: GET, POST
-"""
-
-
-class CollectionList(ListCreateAPIView):
-    queryset = Collection.objects.annotate(products_count=Count("products")).all()
-    serializer_class = CollectionSerializer
-
-
-"""
-class CollectionDetail - Inherited by RetrieveUpdateDestroyAPIView Generic Views
+class CollectionViewSet - Inherited from ModelViewSet Generic Views
 HTTP Requests supported: GET, POST, PUT, DELETE
 """
 
 
-class CollectionDetail(RetrieveUpdateDestroyAPIView):
+class CollectionViewSet(ModelViewSet):
     queryset = Collection.objects.annotate(products_count=Count("products")).all()
     serializer_class = CollectionSerializer
 
-    def delete(self, request, pk):
-        """
-        overriding delete method of the parent class
-        """
-        collection = Collection.objects.annotate(products_count=Count("products")).all()
-        if collection.products.count() > 0:
+    def destroy(self, request, *args, **kwargs):
+        if Product.objects.filter(collection=kwargs["pk"]).count() > 0:
             return Response(
                 {
-                    "error": "Product cannot be deleted becasue it is associated with an item on order"
+                    "error": "collection cannot be deleted becasue it contains one or more products."
                 },
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-        serializer = CollectionSerializer(collection)
-        serializer.data.id = collection.id
-        collection.delete()
-        return Response(serializer.data, status=status.HTTP_204_NO_CONTENT)
+        return super().destroy(request, *args, **kwargs)
+
+
+class ReviewViewSet(ModelViewSet):
+    serializer_class = ReviewSerializer
+
+    def get_queryset(self):
+        return Reviews.objects.filter(product_id=self.kwargs["product_pk"])
+
+    def get_serializer_context(self):
+        return {"product_id": self.kwargs["product_pk"]}

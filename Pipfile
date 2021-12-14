@@ -15,6 +15,7 @@ django-filter = "*"
 djangorestframework = "==3.12.4"
 six = "*"
 pytz = "*"
+drf-nested-routers = "*"
 
 [dev-packages]
 black = "*"

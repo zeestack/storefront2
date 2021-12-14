@@ -6,7 +6,7 @@ from rest_framework.fields import ReadOnlyField
 from rest_framework.relations import HyperlinkedRelatedField
 from typing_extensions import Required
 
-from store.models import Collection, Product
+from store.models import Collection, Product, Reviews
 
 
 class CollectionSerializer(serializers.ModelSerializer):
@@ -71,3 +71,13 @@ class ProductSerializer(serializers.ModelSerializer):
     # instance.unit_price = validated_data.get("unit_price")
     # instance.save()
     # return instance
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Reviews
+        fields = ["id", "date", "name", "description"]
+
+    def create(self, validated_data):
+        product_id = self.context["product_id"]
+        return Reviews.objects.create(product_id=product_id, **validated_data)
