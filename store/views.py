@@ -1,10 +1,12 @@
 from django.db.models.aggregates import Count
 from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
+from django_filters.rest_framework import DjangoFilterBackend, filterset
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+
+from store.filters import ProductFilter
 
 from .models import Collection, OrderItem, Product, Reviews
 from .serializers import CollectionSerializer, ProductSerializer, ReviewSerializer
@@ -19,13 +21,11 @@ HTTP Requests supported: GET, POST, PUT, DELETE
 
 
 class ProductViewSet(ModelViewSet):
+    queryset = Product.objects.all()
     serializer_class = ProductSerializer
-
-    def get_queryset(self):
-        collection_id = self.request.query_params.get("collection_id")
-        if collection_id != None:
-            return Product.objects.filter(collection_id=collection_id)
-        return Product.objects.all()
+    filter_backends = [DjangoFilterBackend]
+    # filterset_fields = ["collection_id", "unit_price"]
+    filterset_class = ProductFilter
 
     def get_serializer_context(self):
         return {"request": self.request}
