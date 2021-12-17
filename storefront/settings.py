@@ -43,8 +43,8 @@ INSTALLED_APPS = [
     "debug_toolbar",
     "store",
     "tags",
-    "store_custom",
     "likes",
+    "core",
 ]
 
 STATIC_URL = "/static/"
@@ -150,3 +150,5 @@ REST_FRAMEWORK = {
     # "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     # "PAGE_SIZE": 10,
 }
+
+AUTH_USER_MODEL = "core.User"

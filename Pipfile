@@ -16,9 +16,11 @@ djangorestframework = "==3.12.4"
 six = "*"
 pytz = "*"
 drf-nested-routers = "*"
+isort = "*"
 
 [dev-packages]
 black = "*"
+isort = "*"
 
 [requires]
 python_version = "3.9"
