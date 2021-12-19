@@ -17,6 +17,8 @@ six = "*"
 pytz = "*"
 drf-nested-routers = "*"
 isort = "*"
+djoser = "*"
+djangorestframework-simplejwt = "*"
 
 [dev-packages]
 black = "*"

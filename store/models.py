@@ -9,6 +9,7 @@ from django.db.models import constraints
 from django.db.models.deletion import CASCADE, SET_NULL
 from django.db.models.fields import EmailField
 from django.db.models.fields.related import ForeignKey
+from rest_framework import permissions
 
 # Create your models here.
 
@@ -87,6 +88,7 @@ class Customer(models.Model):
 
     class Meta:
         ordering = ["user__first_name", "user__last_name"]
+        permissions = [("view history", "can view history")]
 
 
 class Order(models.Model):
@@ -109,7 +111,7 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.PROTECT)
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="items")
     product = models.ForeignKey(
         Product, on_delete=models.PROTECT, related_name="orderitems"
     )

@@ -1,12 +1,22 @@
 from decimal import Decimal
 
+from core.serializers import SimpleUserSerializer
 from django.core.exceptions import ValidationError
 from rest_framework import serializers
 from rest_framework.fields import ReadOnlyField
 from rest_framework.relations import HyperlinkedRelatedField
 from typing_extensions import Required
 
-from store.models import Cart, CartItem, Collection, Product, Reviews
+from store.models import (
+    Cart,
+    CartItem,
+    Collection,
+    Customer,
+    Order,
+    OrderItem,
+    Product,
+    Reviews,
+)
 
 
 class CollectionSerializer(serializers.ModelSerializer):
@@ -151,3 +161,41 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
         fields = ["id", "items", "total_price"]
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product = SimpleProductSerializer()
+
+    class Meta:
+        model = OrderItem
+        fields = ["id", "quantity", "product", "unit_price"]
+
+
+class CustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = ["id", "first_name", "last_name"]
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True)
+    customer = CustomerSerializer()
+
+    class Meta:
+        model = Order
+        fields = ["id", "customer", "placed_at", "payment_status", "items"]
+
+
+class CustomerSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Customer
+        fields = ["id", "membership", "birth_date", "phone", "user_id"]
+
+
+class CustomerProfileSerializer(CustomerSerializer):
+    user = SimpleUserSerializer()
+
+    class Meta(CustomerSerializer.Meta):
+        fields = ["id", "user", "phone", "membership", "birth_date"]
