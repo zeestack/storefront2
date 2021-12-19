@@ -1,7 +1,9 @@
 from decimal import Decimal
 
+from core import models
 from core.serializers import SimpleUserSerializer
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.fields import ReadOnlyField
 from rest_framework.relations import HyperlinkedRelatedField
@@ -17,6 +19,8 @@ from store.models import (
     Product,
     Reviews,
 )
+
+from .signals import order_created
 
 
 class CollectionSerializer(serializers.ModelSerializer):
@@ -165,10 +169,14 @@ class CartSerializer(serializers.ModelSerializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     product = SimpleProductSerializer()
+    total_price = serializers.SerializerMethodField(method_name="get_total_price")
 
     class Meta:
         model = OrderItem
-        fields = ["id", "quantity", "product", "unit_price"]
+        fields = ["id", "quantity", "product", "unit_price", "total_price"]
+
+    def get_total_price(self, order_item: OrderItem):
+        return order_item.unit_price * order_item.quantity
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -177,25 +185,73 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = ["id", "first_name", "last_name"]
 
 
-class OrderSerializer(serializers.ModelSerializer):
-    items = OrderItemSerializer(many=True)
-    customer = CustomerSerializer()
-
-    class Meta:
-        model = Order
-        fields = ["id", "customer", "placed_at", "payment_status", "items"]
-
-
-class CustomerSerializer(serializers.ModelSerializer):
-    user_id = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = Customer
-        fields = ["id", "membership", "birth_date", "phone", "user_id"]
-
-
 class CustomerProfileSerializer(CustomerSerializer):
     user = SimpleUserSerializer()
 
     class Meta(CustomerSerializer.Meta):
         fields = ["id", "user", "phone", "membership", "birth_date"]
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    customer = CustomerSerializer()
+    items = OrderItemSerializer(many=True)
+    total_order_price = serializers.SerializerMethodField(
+        method_name="get_total_order_price"
+    )
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "customer",
+            "placed_at",
+            "payment_status",
+            "items",
+            "total_order_price",
+        ]
+
+    def get_total_order_price(self, order: Order):
+        return sum([item.quantity * item.unit_price for item in order.items.all()])
+
+
+class CreateOrderSerializer(serializers.Serializer):
+    cart_id = serializers.UUIDField()
+
+    def validate_cart_id(self, cart_id):
+        if not Cart.objects.filter(pk=cart_id).exists():
+            raise serializers.ValidationError(
+                "The card does not exist with the given id."
+            )
+        if CartItem.objects.filter(cart_id=cart_id).count() == 0:
+            raise serializers.ValidationError("The cart is empty.")
+
+        return cart_id
+
+    def save(self, **kwargs):
+        cart_id = self.validated_data["cart_id"]
+        user_id = self.context["user_id"]
+        with transaction.atomic():
+            customer = Customer.objects.get(pk=user_id)
+            order = Order.objects.create(customer=customer)
+            cart_items = CartItem.objects.select_related("product").filter(
+                cart_id=cart_id
+            )
+            order_items = [
+                OrderItem(
+                    order=order,
+                    product=item.product,
+                    quantity=item.quantity,
+                    unit_price=item.product.unit_price,
+                )
+                for item in cart_items
+            ]
+            OrderItem.objects.bulk_create(order_items)
+            Cart.objects.filter(pk=cart_id).delete()
+            order_created.send_robust(self.__class__, order=order)
+            return order
+
+
+class UpdateOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ["payment_status"]

@@ -1,4 +1,6 @@
+from django.db import transaction
 from django.db.models.aggregates import Count
+from django.db.models.base import Model
 from django_filters.rest_framework import DjangoFilterBackend
 from djoser.conf import User
 from rest_framework import permissions, status
@@ -40,12 +42,14 @@ from .serializers import (
     CartItemSerializer,
     CartSerializer,
     CollectionSerializer,
+    CreateOrderSerializer,
     CustomerProfileSerializer,
     CustomerSerializer,
     OrderSerializer,
     ProductSerializer,
     ReviewSerializer,
     UpdateCartItemSerializer,
+    UpdateOrderSerializer,
 )
 
 # Create your views here.
@@ -131,6 +135,35 @@ class CartViewSet(
     serializer_class = CartSerializer
 
 
+class CustomerViewSet(ModelViewSet):
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+
+    permission_classes = [IsAdminUser]
+
+    @action(
+        detail=False,
+        methods=["GET", "PUT"],
+        permission_classes=[IsAuthenticated],
+    )
+    def me(self, request):
+        method = request.method
+        user_id = request.user.id
+        customer = Customer.objects.get(user_id=user_id)
+        if method == "GET":
+            serializer = CustomerProfileSerializer(customer)
+            return Response(serializer.data)
+        elif method == "PUT":
+            serializer = CustomerSerializer(customer, request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+
+    @action(detail=False, permission_classes=[ViewHistoryPermission])
+    def history(self, request):
+        return Response("ok")
+
+
 class CartItemViewSet(ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete"]
 
@@ -151,46 +184,51 @@ class CartItemViewSet(ModelViewSet):
 
 
 class OrderViewSet(ModelViewSet):
-    # queryset = Order.objects.all()
-    serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
+
+    http_method_names = ["get", "patch", "post", "delete", "head", "options"]
+
+    def get_permissions(self):
+        if self.request.method in ["PATCH", "DELETE"]:
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return CreateOrderSerializer
+        elif self.request.method == "PATCH":
+            return UpdateOrderSerializer
+        return OrderSerializer
+
+    def get_serializer_context(self):
+        return {"user_id": self.request.user.id}
 
     def get_queryset(self):
         user = self.request.user
-
         if user.is_staff:
             return Order.objects.all()
-
-        (customer_id, created) = Customer.objects.only("id").get_or_create(
-            user_id=user.id
+        customer = Customer.objects.get(user_id=user.id)
+        return (
+            Order.objects.prefetch_related("items")
+            .select_related("customer")
+            .filter(customer_id=customer.id)
+            .all()
         )
-        return Order.objects.filter(customer_id=customer_id).all()
 
+    def create(self, request, *args, **kwargs):
+        serializer = CreateOrderSerializer(
+            data=request.data, context=self.get_serializer_context()
+        )
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+        serializer = OrderSerializer(order)
+        return Response(serializer.data)
 
-class CustomerViewSet(ModelViewSet):
-    queryset = Customer.objects.all()
-    serializer_class = CustomerSerializer
-
-    permission_classes = [IsAdminUser]
-
-    @action(
-        detail=False,
-        methods=["GET", "PUT"],
-        permission_classes=[IsAuthenticated],
-    )
-    def me(self, request):
-        method = request.method
-        user_id = request.user.id
-        (customer, created) = Customer.objects.get_or_create(user_id=user_id)
-        if method == "GET":
-            serializer = CustomerProfileSerializer(customer)
-            return Response(serializer.data)
-        elif method == "PUT":
-            serializer = CustomerSerializer(customer, request.data)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
-
-    @action(detail=False, permission_classes=[ViewHistoryPermission])
-    def history(self, request):
-        return Response("ok")
+    def destroy(self, request, *args, **kwargs):
+        with transaction.atomic():
+            instance = self.get_object()
+            serializer = OrderSerializer(instance=instance)
+            order = serializer.data
+            OrderItem.objects.filter(order_id=kwargs["pk"]).delete()
+            instance.delete()
+            return Response(order, status=status.HTTP_200_OK)
+            # return super().destroy(request, *args, **kwargs)
